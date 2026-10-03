@@ -20,6 +20,8 @@ MAX_SLUGS = 10
 CTX = ssl.create_default_context()
 SEASON = {"Winter": 1, "Spring": 2, "Summer": 3, "Fall": 4}
 _algolia = None  # (app, key), cached per warm instance
+_pool = cf.ThreadPoolExecutor(32)  # site checks; outlives a request so a slow site can be abandoned
+SITE_DEADLINE = 4  # seconds per company before giving up on its website
 
 
 def get(url, timeout=8, data=None, headers=None):
@@ -85,7 +87,7 @@ def ascii_name(s):
 def site_emails(website, domain):
     found = set()
     for path in ("", "/contact"):  # ponytail: 2 pages, not the CLI's 6, to fit in a function timeout
-        body = get(website.rstrip("/") + path, timeout=5)
+        body = get(website.rstrip("/") + path, timeout=3)
         for e in EMAIL_RE.findall(urllib.parse.unquote(html.unescape(body or ""))):
             e = e.lower().strip(".")
             host = e.split("@")[1]
@@ -118,7 +120,10 @@ def founders(slug):
     c = json.loads(html.unescape(m.group(1)))["props"]["company"]
     website = c.get("website") or ""  # always from YC, never from the client
     domain = domain_of(website)
-    emails = site_emails(website, domain) if domain else []
+    try:
+        emails = _pool.submit(site_emails, website, domain).result(timeout=SITE_DEADLINE) if domain else []
+    except cf.TimeoutError:
+        emails = []  # ponytail: slow site skipped, guesses still cover it; the CLI waits longer
     dns = resolves(domain) if domain else False
     out = []
     for f in c.get("founders", []):

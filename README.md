@@ -13,8 +13,9 @@ Python 3.9+, standard library only. Nothing to install.
 ## What it does
 
 1. **Pick a batch** (Summer 2005 through the latest) from YC's public directory.
-2. **Founders load automatically.** For every company, the server reads its ycombinator.com page for the founders'
-   names, titles, LinkedIn and X.
+2. **Founders load 20 companies at a time** (about 5–10 s per 20); click **Load more** for the next 20. For each
+   company the server reads its ycombinator.com page for the founders' names, titles, LinkedIn and X. Loaded
+   companies are kept in your browser, so reopening a batch is instant.
 3. **Emails are filled in** for each founder, best source first:
 
    | Label | Source | Reliability |
@@ -73,7 +74,9 @@ Newest first. Includes `"Unspecified"`, which the UI hides.
 
 ### `/api/yc?action=founders&slugs=indemni,parcelbio`
 
-At most 10 slugs per call (`^[a-z0-9-]+$`). The UI sends batches of 10, three at a time. About 6 s per call.
+At most 10 slugs per call (`^[a-z0-9-]+$`). The UI loads 20 companies per click as two parallel calls. About
+5–9 s per call; each company's website check is cut off after 4 s (`SITE_DEADLINE`) so one slow site can't stall
+the batch.
 
 ```json
 [{"slug": "indemni", "website": "http://www.indemni.com", "domain": "indemni.com",
@@ -118,7 +121,8 @@ more thorough than the web API.
 
 - Standard library only, on purpose. Don't add dependencies or a build step.
 - `api/yc.py` and `yc_scraper.py` share logic but are separate on purpose: the function has to finish inside a
-  serverless timeout, so it makes one attempt per fetch and checks 2 pages; the CLI retries and checks 6.
+  serverless timeout, so it makes one attempt per fetch, checks 2 pages, and gives up on a website after 4 s;
+  the CLI retries and checks 6.
 - The function only accepts a batch name or slugs. Websites always come from YC's data, never from the request, so
   it can't be used to fetch arbitrary URLs. Keep it that way.
 - Everything from YC is untrusted text. `index.html` escapes it (`esc()`) and only links `http(s)` URLs (`url()`).
